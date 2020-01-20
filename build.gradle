@@ -12,14 +12,9 @@ buildscript {
 }
 
 sourceCompatibility = 1.8
-version = '0.2.1'
+version = '0.2.1.0'
 
-def ENV = System.getenv()
-if (ENV.BUILD_NUMBER) {
-    version = version + "." + "${System.getenv().BUILD_NUMBER}"
-}
-
-group = 'net.fabricmc'
+group = 'io.github.fukkitmc'
 archivesBaseName = 'tiny-remapper'
 
 repositories {
@@ -33,7 +28,6 @@ dependencies {
 	compile 'org.ow2.asm:asm-util:7.0'
 }
 
-apply from: 'https://github.com/FabricMC/fabric-docs/raw/master/gradle/maven.gradle'
 apply from: 'https://github.com/FabricMC/fabric-docs/raw/master/gradle/license.gradle'
 
 jar {
@@ -67,4 +61,22 @@ task sourceJar(type:Jar) {
 artifacts {
    archives fatJar
    archives sourceJar
+}
+
+apply plugin: 'maven-publish'
+
+publishing {
+	repositories {
+		maven {
+			name = "Fukkit"
+			url = uri("../fukkit-repo")
+		}
+	}
+
+	publications {
+		maven (MavenPublication) {
+			from components.java
+			artifact tasks.sourceJar
+		}
+	}
 }

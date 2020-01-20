@@ -45,6 +45,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+import java.util.function.UnaryOperator;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -128,6 +129,16 @@ public class TinyRemapper {
 			return this;
 		}
 
+		public Builder extraPreVisitor(UnaryOperator<ClassVisitor> visitor) {
+			extraPreVisitor = visitor;
+			return this;
+		}
+
+		public Builder extraPostVisitor(UnaryOperator<ClassVisitor> visitor) {
+			extraPostVisitor = visitor;
+			return this;
+		}
+
 		public Builder extraAnalyzeVisitor(ClassVisitor visitor) {
 			extraAnalyzeVisitor = visitor;
 			return this;
@@ -143,6 +154,7 @@ public class TinyRemapper {
 					forcePropagation, propagatePrivate,
 					removeFrames, ignoreConflicts, resolveMissing, checkPackageAccess || fixPackageAccess, fixPackageAccess,
 					rebuildSourceFilenames, skipLocalMapping, renameInvalidLocals,
+					extraPreVisitor, extraPostVisitor,
 					extraAnalyzeVisitor, extraRemapper);
 
 			return remapper;
@@ -161,6 +173,8 @@ public class TinyRemapper {
 		private boolean rebuildSourceFilenames = false;
 		private boolean skipLocalMapping = false;
 		private boolean renameInvalidLocals = false;
+		private UnaryOperator<ClassVisitor> extraPreVisitor;
+		private UnaryOperator<ClassVisitor> extraPostVisitor;
 		private ClassVisitor extraAnalyzeVisitor;
 		private Remapper extraRemapper;
 	}
@@ -176,6 +190,8 @@ public class TinyRemapper {
 			boolean rebuildSourceFilenames,
 			boolean skipLocalMapping,
 			boolean renameInvalidLocals,
+			UnaryOperator<ClassVisitor> extraPreVisitor,
+			UnaryOperator<ClassVisitor> extraPostVisitor,
 			ClassVisitor extraAnalyzeVisitor, Remapper extraRemapper) {
 		this.mappingProviders = mappingProviders;
 		this.ignoreFieldDesc = ignoreFieldDesc;
@@ -191,6 +207,8 @@ public class TinyRemapper {
 		this.rebuildSourceFilenames = rebuildSourceFilenames;
 		this.skipLocalMapping = skipLocalMapping;
 		this.renameInvalidLocals = renameInvalidLocals;
+		this.extraPreVisitor = extraPreVisitor;
+		this.extraPostVisitor = extraPostVisitor;
 		this.extraAnalyzeVisitor = extraAnalyzeVisitor;
 		this.extraRemapper = extraRemapper;
 	}
@@ -665,16 +683,25 @@ public class TinyRemapper {
 
 		ClassVisitor visitor = writer;
 
+		if (extraPostVisitor != null) {
+			visitor = extraPostVisitor.apply(visitor);
+		}
+
 		if (rebuildSourceFilenames) {
 			visitor = new SourceNameRebuildVisitor(Opcodes.ASM7, visitor);
 		}
 
 		if (check) {
-			//noinspection UnusedAssignment
 			visitor = new CheckClassAdapter(visitor);
 		}
 
-		reader.accept(new AsmClassRemapper(visitor, remapper, checkPackageAccess, skipLocalMapping, renameInvalidLocals), flags);
+		visitor = new AsmClassRemapper(visitor, remapper, checkPackageAccess, skipLocalMapping, renameInvalidLocals);
+
+		if (extraPreVisitor != null) {
+			visitor = extraPreVisitor.apply(visitor);
+		}
+
+		reader.accept(visitor, flags);
 		// TODO: compute frames (-Xverify:all -XX:-FailOverToOldVerifier)
 
 		return writer.toByteArray();
@@ -853,6 +880,8 @@ public class TinyRemapper {
 	private final boolean rebuildSourceFilenames;
 	private final boolean skipLocalMapping;
 	private final boolean renameInvalidLocals;
+	private final UnaryOperator<ClassVisitor> extraPreVisitor;
+	private final UnaryOperator<ClassVisitor> extraPostVisitor;
 	private final ClassVisitor extraAnalyzeVisitor;
 	final Remapper extraRemapper;
 	final Map<String, String> classMap = new HashMap<>();
